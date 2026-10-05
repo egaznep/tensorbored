@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tensorbored"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 description = "TensorBored: a PyTorch-first TensorBoard fork"
 readme = "tensorbored/pip_package/README.rst"
 license = {text = "AGPL-3.0-or-later"}
@@ -56,3 +56,4 @@ include = ["tensorbored*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "tensorbored.version.VERSION"}
+dependencies = {file = ["tensorbored/pip_package/requirements.txt"]}
