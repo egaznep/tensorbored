@@ -16,6 +16,8 @@
 # Non-vendored runtime dependencies of TensorBoard.
 
 absl-py >= 0.4
+# Used by tensorbored/plugin_util.py to sanitize plugin HTML output.
+bleach
 # NOTE: this version should be >= the grpc version in our WORKSPACE file.
 grpcio >= 1.48.2
 markdown >= 2.6.8
@@ -26,12 +28,10 @@ numpy >= 1.12.0
 # can get rid of the packaging dependency.
 packaging
 pillow
-# NOTE: this version must be >= the protoc version in our WORKSPACE file.
-# At the same time, any constraints we specify here must allow at least some
-# version to be installed that is also compatible with TensorFlow's constraints:
-# https://github.com/tensorflow/tensorflow/blob/25adc4fccb4b0bb5a933eba1d246380e7b87d7f7/tensorflow/tools/pip_package/setup.py#L101
-# 4.24.0 had an issue that broke our tests, so we should avoid that release:
-# https://github.com/protocolbuffers/protobuf/issues/13485
-protobuf >= 3.19.6, != 4.24.0
+# NOTE: this version must be compatible with the grpcio-tools version pinned in
+# pyproject.toml (which generates the *_pb2.py modules at build time).
+# grpcio-tools 1.84.0 requires protobuf >= 7.35.1, < 8.0.0.
+# We no longer constrain protobuf for TensorFlow compatibility.
+protobuf >= 7.35.1, < 8.0.0
 tensorboard-data-server >= 0.7.0, < 0.8.0
 werkzeug >= 1.0.1

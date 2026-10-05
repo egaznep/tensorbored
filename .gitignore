@@ -6,3 +6,6 @@
 *.swp
 node_modules
 buildifier
+/build_tmp/
+*_pb2.py
+*_pb2_grpc.py
