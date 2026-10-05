@@ -58,6 +58,12 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     <hparams-split-layout orientation="vertical">
       <div slot="content" class="section hyperparameters">
         <div class="section-title">Hyperparameters</div>
+        <paper-checkbox
+          checked="{{_showOnlyDifferingHparams}}"
+          class="differing-only-checkbox"
+        >
+          Show only differing hyperparameters
+        </paper-checkbox>
         <template is="dom-if" if="[[_TooManyHparams]]">
           <div class="too-many-hparams">
             Warning: There were too many hparams to load all of them
@@ -65,62 +71,64 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
           </div>
         </template>
         <template is="dom-repeat" items="{{_hparams}}" as="hparam">
-          <div class="hparam">
-            <paper-checkbox
-              checked="{{hparam.displayed}}"
-              class="hparam-checkbox"
-            >
-              [[_hparamName(hparam.info)]]
-            </paper-checkbox>
-            <!-- Precisely one of the templates below will be stamped.-->
-            <!-- 1. A list of checkboxes -->
-            <template is="dom-if" if="[[hparam.filter.domainDiscrete]]">
-              <template
-                is="dom-repeat"
-                items="[[hparam.filter.domainDiscrete]]"
+          <template is="dom-if" if="[[_isHParamVisible(hparam)]]">
+            <div class="hparam">
+              <paper-checkbox
+                checked="{{hparam.displayed}}"
+                class="hparam-checkbox"
               >
-                <paper-checkbox
-                  checked="{{item.checked}}"
-                  class="discrete-value-checkbox"
-                  on-change="_queryServer"
+                [[_hparamName(hparam.info)]]
+              </paper-checkbox>
+              <!-- Precisely one of the templates below will be stamped.-->
+              <!-- 1. A list of checkboxes -->
+              <template is="dom-if" if="[[hparam.filter.domainDiscrete]]">
+                <template
+                  is="dom-repeat"
+                  items="[[hparam.filter.domainDiscrete]]"
                 >
-                  [[_prettyPrint(item.value)]]
-                </paper-checkbox>
+                  <paper-checkbox
+                    checked="{{item.checked}}"
+                    class="discrete-value-checkbox"
+                    on-change="_queryServer"
+                  >
+                    [[_prettyPrint(item.value)]]
+                  </paper-checkbox>
+                </template>
               </template>
-            </template>
-            <!-- 2. A numeric interval -->
-            <template is="dom-if" if="[[hparam.filter.interval]]">
-              <paper-input
-                label="Min"
-                value="{{hparam.filter.interval.min.value}}"
-                allowed_pattern="[0-9.e\\-]"
-                on-value-changed="_queryServer"
-                error-message="Invalid input"
-                invalid="[[hparam.filter.interval.min.invalid]]"
-                placeholder="-infinity"
-              >
-              </paper-input>
-              <paper-input
-                label="Max"
-                value="{{hparam.filter.interval.max.value}}"
-                allowed_pattern="[0-9.e\\-]"
-                on-value-changed="_queryServer"
-                error-message="Invalid input"
-                invalid="[[hparam.filter.interval.max.invalid]]"
-                placeholder="+infinity"
-              >
-              </paper-input>
-            </template>
-            <!-- 3. A regexp -->
-            <template is="dom-if" if="[[_hasRegexpFilter(hparam)]]">
-              <paper-input
-                label="Regular expression"
-                value="{{hparam.filter.regexp}}"
-                on-value-changed="_queryServer"
-              >
-              </paper-input>
-            </template>
-          </div>
+              <!-- 2. A numeric interval -->
+              <template is="dom-if" if="[[hparam.filter.interval]]">
+                <paper-input
+                  label="Min"
+                  value="{{hparam.filter.interval.min.value}}"
+                  allowed_pattern="[0-9.e\\-]"
+                  on-value-changed="_queryServer"
+                  error-message="Invalid input"
+                  invalid="[[hparam.filter.interval.min.invalid]]"
+                  placeholder="-infinity"
+                >
+                </paper-input>
+                <paper-input
+                  label="Max"
+                  value="{{hparam.filter.interval.max.value}}"
+                  allowed_pattern="[0-9.e\\-]"
+                  on-value-changed="_queryServer"
+                  error-message="Invalid input"
+                  invalid="[[hparam.filter.interval.max.invalid]]"
+                  placeholder="+infinity"
+                >
+                </paper-input>
+              </template>
+              <!-- 3. A regexp -->
+              <template is="dom-if" if="[[_hasRegexpFilter(hparam)]]">
+                <paper-input
+                  label="Regular expression"
+                  value="{{hparam.filter.regexp}}"
+                  on-value-changed="_queryServer"
+                >
+                </paper-input>
+              </template>
+            </div>
+          </template>
         </template>
       </div>
       <div slot="content" class="section metrics">
@@ -290,6 +298,10 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       .hparam-checkbox {
         display: block;
       }
+      .differing-only-checkbox {
+        display: block;
+        margin-bottom: 5px;
+      }
       .discrete-value-checkbox {
         margin-left: 20px;
       }
@@ -446,6 +458,14 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   //   'regexp' string field containing the filtering regexp.
   @property({type: Array})
   _hparams: any[];
+  // When true, only hyperparameters that vary across the recorded experiments
+  // (i.e. those whose HParamInfo 'differs' field is set) are shown in the
+  // hyperparameters list and included as columns in the views. Non-differing
+  // hparams are hidden regardless of their 'displayed' checkbox state, which
+  // is left untouched so that toggling this off restores the user's previous
+  // selection.
+  @property({type: Boolean})
+  _showOnlyDifferingHparams: boolean = false;
   // The limit to the number of hparams we will load. Loading too many will slow
   // down the UI noticeably and possibly crash it.
   @property({type: Number}) _maxNumHparamsToLoad: number = 1000;
@@ -699,7 +719,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       })),
     };
   }
-  @observe('_hparams.*', '_metrics.*')
+  @observe('_hparams.*', '_metrics.*', '_showOnlyDifferingHparams')
   _updateConfiguration() {
     this.debounce('_updateConfiguration', () => {
       this.configuration = {
@@ -712,7 +732,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   _computeColumnsVisibility() {
     if (!this._hparams || !this._metrics) return [];
     return this._hparams
-      .map((hparam) => hparam.displayed)
+      .map((hparam) => this._isHParamVisible(hparam))
       .concat(this._metrics.map((metric) => metric.displayed));
   }
   _computeVisibleSchema() {
@@ -720,7 +740,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       return {hparamInfos: [], metricInfos: []};
     }
     const newHParamInfos = this._hparams
-      .filter((hparam) => hparam.displayed)
+      .filter((hparam) => this._isHParamVisible(hparam))
       .map((hparam) => hparam.info);
     const newMetricInfos = this._metrics
       .filter((metric) => metric.displayed)
@@ -729,6 +749,16 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       hparamInfos: newHParamInfos,
       metricInfos: newMetricInfos,
     };
+  }
+  // Determines whether the given hparam should be shown in the hyperparameters
+  // list and included as a column. When _showOnlyDifferingHparams is true, only
+  // hparams that differ across the experiments are visible, overriding the
+  // hparam's 'displayed' checkbox.
+  _isHParamVisible(hparam) {
+    return (
+      hparam.displayed &&
+      (!this._showOnlyDifferingHparams || hparam.info.differs)
+    );
   }
   // Determines if a regex filter should be rendered.
   _hasRegexpFilter(hparam) {
