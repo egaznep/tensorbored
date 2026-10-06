@@ -1,0 +1,17 @@
+diff --git a/closure/repositories.bzl b/closure/repositories.bzl
+--- a/closure/repositories.bzl
++++ b/closure/repositories.bzl
+@@ -1106,6 +1106,12 @@ def zlib():
+     http_archive(
+         name = "zlib",
+         build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
+         sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
++        # zlib 1.2.11's zutil.h redefines fdopen on macOS because Apple SDKs
++        # always define TARGET_OS_MAC, which collides with _stdio.h on modern
++        # Xcode/clang. Drop TARGET_OS_MAC from the guard so the fdopen macro is
++        # not defined; the real fdopen() is available in stdio.h on macOS.
++        patch_args = ["-p1"],
++        patch_cmds = ["sed -i.bak 's/#if defined(MACOS) || defined(TARGET_OS_MAC)/#if defined(MACOS)/' zutil.h"],
+         strip_prefix = "zlib-1.2.11",
+         urls = [
+             "https://mirror.bazel.build/zlib.net/zlib-1.2.11.tar.gz",

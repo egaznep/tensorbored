@@ -7,5 +7,7 @@
 node_modules
 buildifier
 /build_tmp/
+/webfiles.zip
+/tensorbored/webfiles.zip
 *_pb2.py
 *_pb2_grpc.py

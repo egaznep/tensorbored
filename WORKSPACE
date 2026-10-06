@@ -55,6 +55,8 @@ py_repositories()
 
 http_archive(
     name = "io_bazel_rules_closure",
+    patch_args = ["-p1"],
+    patches = ["//third_party:rules_closure_zlib_macos.patch"],
     sha256 = "ae060075a7c468eee42e6a08ddbb83f5a6663bdfdbd461261a465f4a3ae8598c",
     strip_prefix = "rules_closure-7f3d3351a8cc31fbaa403de7d35578683c17b447",
     urls = [

@@ -55,6 +55,9 @@ target-version = ["py38", "py39"]
 [tool.setuptools.packages.find]
 include = ["tensorbored*"]
 
+[tool.setuptools.package-data]
+tensorbored = ["webfiles.zip"]
+
 [tool.setuptools.dynamic]
 version = {attr = "tensorbored.version.VERSION"}
 dependencies = {file = ["tensorbored/pip_package/requirements.txt"]}
