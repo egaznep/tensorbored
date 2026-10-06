@@ -631,11 +631,6 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
             invalid: false,
           },
         };
-      } else if (hparam.info.type === 'DATA_TYPE_STRING') {
-        // A string domain with no discrete values. Treat it as an empty
-        // discrete domain so the hparam stays usable and no warning is
-        // emitted.
-        hparam.filter.domainDiscrete = [];
       } else {
         console.warn(
           'cannot process domain type %s without discrete domain values',
@@ -652,9 +647,14 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
 
       return x.info.differs ? -1 : 1;
     });
-    // Display all loaded hparams in the main view initially.
-    for (const hparam of result) {
-      hparam.displayed = true;
+    // Choose to display the first 5 hparams in the main view initially.
+    const kNumHParamsToDisplayByDefault = 5;
+    const numHparamsToDisplay = Math.min(
+      kNumHParamsToDisplayByDefault,
+      result.length
+    );
+    for (let i = 0; i < numHparamsToDisplay; i++) {
+      result[i].displayed = true;
     }
     this.set('_hparams', result);
     this.set('_TooManyHparams', result.length >= this._maxNumHparamsToLoad);
