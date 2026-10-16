@@ -25,6 +25,7 @@ from tensorbored.data import provider
 from tensorbored.plugins import base_plugin
 from tensorbored.plugins.hparams import api_pb2
 from tensorbored.plugins.hparams import backend_context
+from tensorbored.plugins.hparams import error
 from tensorbored.plugins.hparams import list_session_groups
 from tensorbored.plugins.hparams import metadata
 from tensorbored.plugins.hparams import plugin_data_pb2
@@ -889,6 +890,134 @@ class ListSessionGroupsTest(tf.test.TestCase):
             expected_session_group_names=[],
             expected_total_size=0,
         )
+
+    def test_filter_by_group_name_regex(self):
+        # A partial-match regex keeps only the matching session groups.
+        self._verify_handler(
+            request="""
+                group_name_regex: 'group_[12]'
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+            """,
+            expected_session_group_names=["group_1", "group_2"],
+            expected_total_size=2,
+        )
+        # A non-matching regex returns no session groups.
+        self._verify_handler(
+            request="""
+                group_name_regex: 'nonexistent_group'
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+            """,
+            expected_session_group_names=[],
+            expected_total_size=0,
+        )
+        # An empty regex leaves the results unchanged.
+        self._verify_handler(
+            request="""
+                group_name_regex: ''
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+            """,
+            expected_session_group_names=["group_1", "group_2", "group_3"],
+            expected_total_size=3,
+        )
+
+    def test_filter_by_group_name_regex_with_col_filter(self):
+        # The group-name regex composes with an existing hparam filter, and
+        # total_size reflects the intersection.
+        self._verify_handler(
+            request="""
+                group_name_regex: 'group_[12]'
+                col_params: {
+                  hparam: 'initial_temp'
+                  filter_interval: { min_value: 270 max_value: 282 }
+                }
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+            """,
+            expected_session_group_names=["group_1", "group_2"],
+            expected_total_size=2,
+        )
+        # group_3 is excluded by the interval filter even though group_3
+        # would not match the regex anyway; check a case where the regex
+        # matches but the col filter excludes.
+        self._verify_handler(
+            request="""
+                group_name_regex: 'group_.*'
+                col_params: {
+                  hparam: 'initial_temp'
+                  filter_interval: { min_value: 300 max_value: 400 }
+                }
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+            """,
+            expected_session_group_names=["group_3"],
+            expected_total_size=1,
+        )
+
+    def test_filter_by_group_name_regex_invalid(self):
+        with self.assertRaises(error.HParamsError):
+            self._run_handler(
+                """
+                group_name_regex: '['
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+                """
+            )
+
+    def test_filter_by_group_name_regex_too_long(self):
+        with self.assertRaises(error.HParamsError):
+            self._run_handler(
+                """
+                group_name_regex: '%s'
+                allowed_statuses: [
+                  STATUS_UNKNOWN,
+                  STATUS_SUCCESS,
+                  STATUS_FAILURE,
+                  STATUS_RUNNING
+                ]
+                start_index: 0
+                slice_size: 3
+                """
+                % ("a" * 1001)
+            )
 
     def test_filter_interval(self):
         self._verify_handler(

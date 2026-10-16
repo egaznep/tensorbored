@@ -271,7 +271,7 @@ message GetExperimentRequest {
 // Computes a list of the current session groups allowing for filtering and
 // sorting by metrics and hyperparameter values. Returns a "slice" of
 // that list specified by start_index and slice_size.
-// NEXT_TAG: 9
+// NEXT_TAG: 10
 message ListSessionGroupsRequest {
   string experiment_name = 6;
 
@@ -324,6 +324,11 @@ message ListSessionGroupsRequest {
 
   // Whether to fetch metrics and include them in the results. Defaults to true.
   optional bool include_metrics = 8;
+
+  // Filters session groups by name. Only session groups whose 'name' matches
+  // this regular expression as a partial match (use '^<regexp>$' for a full
+  // match) are included. Empty string means no filtering.
+  string group_name_regex = 9;
 }
 
 // Defines parameters for a ListSessionGroupsRequest for a specific column.

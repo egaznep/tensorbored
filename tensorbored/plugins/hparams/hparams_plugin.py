@@ -195,7 +195,12 @@ def _parse_request_argument(request, proto_class):
         else request.args.get("request")
     )
     try:
-        return json_format.Parse(request_json, proto_class())
+        # Ignore unknown fields so that a newer frontend sending additive proto
+        # fields does not hard-fail against an older backend. See
+        # https://github.com/Demonstrandum/tensorbored/issues/42.
+        return json_format.Parse(
+            request_json, proto_class(), ignore_unknown_fields=True
+        )
     # if request_json is None, json_format.Parse will throw an AttributeError:
     # 'NoneType' object has no attribute 'decode'.
     except (AttributeError, json_format.ParseError) as e:

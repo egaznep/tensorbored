@@ -32,6 +32,12 @@ from tensorbored.plugins.hparams import metrics
 from tensorbored.plugins.hparams import plugin_data_pb2
 
 
+# Coarse upper bound on the length of a client-supplied 'group_name_regex', to
+# limit the cost of matching pathological patterns. See
+# _filter_by_group_name_regex.
+_MAX_GROUP_NAME_REGEX_LENGTH = 1000
+
+
 class Handler:
     """Handles a ListSessionGroups request."""
 
@@ -456,6 +462,7 @@ class Handler:
                 )
 
     def _create_response(self, session_groups):
+        session_groups = self._filter_by_group_name_regex(session_groups)
         return api_pb2.ListSessionGroupsResponse(
             session_groups=session_groups[
                 self._request.start_index : self._request.start_index
@@ -463,6 +470,49 @@ class Handler:
             ],
             total_size=len(session_groups),
         )
+
+    def _filter_by_group_name_regex(self, session_groups):
+        """Filters session groups by their name using the request's regex.
+
+        Only session groups whose 'name' matches 'group_name_regex' as a
+        partial match are kept. An empty regex means no filtering.
+
+        Warning: Note that python's regex library allows inputs that take
+        exponential time. Time-limiting it is difficult. When we move to a
+        true multi-tenant tensorboard server, the regexp implementation here
+        would need to be replaced by something more secure. As a coarse
+        guard we reject unreasonably long patterns.
+
+        Args:
+          session_groups: A list of api_pb2.SessionGroup protobuffers.
+
+        Returns:
+          The list of session groups passing the filter (or the input list
+          unchanged if no regex was specified).
+
+        Raises:
+          error.HParamsError: If 'group_name_regex' is not a valid regex or
+            is longer than _MAX_GROUP_NAME_REGEX_LENGTH.
+        """
+        regex = self._request.group_name_regex
+        if not regex:
+            return session_groups
+        if len(regex) > _MAX_GROUP_NAME_REGEX_LENGTH:
+            raise error.HParamsError(
+                "group_name_regex is too long (%d > %d characters)"
+                % (len(regex), _MAX_GROUP_NAME_REGEX_LENGTH)
+            )
+        try:
+            compiled_regex = re.compile(regex)
+        except re.error as e:
+            raise error.HParamsError(
+                "Invalid group_name_regex %r: %s" % (regex, e)
+            )
+        return [
+            sg
+            for sg in session_groups
+            if compiled_regex.search(sg.name) is not None
+        ]
 
 
 def _create_key_func(extractor, none_is_largest):

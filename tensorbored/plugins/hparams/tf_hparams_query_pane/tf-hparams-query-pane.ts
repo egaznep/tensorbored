@@ -927,6 +927,23 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       colParams[this._sortByIndex].order =
         this._sortDirection === 0 ? 'ORDER_ASC' : 'ORDER_DESC';
     }
+    // Run filter (session group name regex).
+    let groupNameRegex: string | undefined;
+    if (this._runFilterRegex) {
+      let regexValid = true;
+      try {
+        new RegExp(this._runFilterRegex);
+      } catch (e) {
+        regexValid = false;
+      }
+      this.set('_runFilterRegexInvalid', !regexValid);
+      queryValid = queryValid && regexValid;
+      if (regexValid) {
+        groupNameRegex = this._runFilterRegex;
+      }
+    } else {
+      this.set('_runFilterRegexInvalid', false);
+    }
     // Paging.
     const pageNum = parseInputAsPositiveInt('_pageNumberInput') || 0;
     const pageSize = parseInputAsPositiveInt('_pageSizeInput') || 0;
@@ -934,13 +951,23 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       return null;
     }
     const startIndex = pageSize * (pageNum - 1);
-    return {
+    const request: any = {
       experimentName: this.experimentName,
       allowedStatuses: allowedStatuses,
       colParams: colParams,
       startIndex: startIndex,
       sliceSize: pageSize,
     };
+    if (groupNameRegex !== undefined) {
+      request.groupNameRegex = groupNameRegex;
+    }
+    return request;
+  }
+  // Resets the page number to the first page whenever the run filter changes,
+  // so that a stricter filter does not leave the user on an empty page.
+  @observe('_runFilterRegex')
+  _runFilterRegexChanged() {
+    this.set('_pageNumberInput.value', '1');
   }
   // We allow sorting by any column of a session group. A column is either a
   // metric or a hyperparameter.
