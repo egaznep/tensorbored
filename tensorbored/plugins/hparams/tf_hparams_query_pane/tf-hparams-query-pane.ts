@@ -45,6 +45,11 @@ interface ColumnMetric {
 
 const MAX_DOMAIN_DISCRETE_LIST_LEN = 10;
 
+// localStorage key under which the user's selected (displayed)
+// hyperparameters are persisted, as a JSON object mapping hparam name to
+// a boolean. This lets the selection survive a page refresh.
+const SELECTED_HPARAMS_STORAGE_KEY = 'hparams:selectedHparams';
+
 /**
  * The tf-hparams-query-pane element implements controls for querying the
  * server for a list of session groups. It provides filtering, and
@@ -56,6 +61,17 @@ const MAX_DOMAIN_DISCRETE_LIST_LEN = 10;
 class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   static readonly template = html`
     <hparams-split-layout orientation="vertical">
+      <div slot="content" class="section run-filter">
+        <div class="section-title">Run filter</div>
+        <paper-input
+          label="Regular expression"
+          value="{{_runFilterRegex}}"
+          on-value-changed="_queryServer"
+          error-message="Invalid regular expression"
+          invalid="[[_runFilterRegexInvalid]]"
+        >
+        </paper-input>
+      </div>
       <div slot="content" class="section hyperparameters">
         <div class="section-title">Hyperparameters</div>
         <template is="dom-if" if="[[_TooManyHparams]]">
@@ -69,6 +85,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
             <paper-checkbox
               checked="{{hparam.displayed}}"
               class="hparam-checkbox"
+              on-change="_hparamDisplayedChanged"
             >
               [[_hparamName(hparam.info)]]
             </paper-checkbox>
@@ -511,6 +528,16 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   // 0 means ascending, 1 means descending.
   @property({type: Number})
   _sortDirection: number;
+  // The regular expression filtering which session groups (rows) are shown.
+  // Only session groups whose name matches this regex as a partial match are
+  // included. An empty string means no filtering.
+  @property({type: String})
+  _runFilterRegex: string = '';
+  // Whether the value currently in the run-filter input is an invalid regex.
+  // When true, no request is sent (see _buildListSessionGroupsRequest) and the
+  // input displays an error message.
+  @property({type: Boolean})
+  _runFilterRegexInvalid: boolean = false;
   // The value and invalid properties of the 'page-size' input box.
   @property({
     type: Object,
@@ -647,14 +674,24 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
 
       return x.info.differs ? -1 : 1;
     });
-    // Choose to display the first 5 hparams in the main view initially.
-    const kNumHParamsToDisplayByDefault = 5;
-    const numHparamsToDisplay = Math.min(
-      kNumHParamsToDisplayByDefault,
-      result.length
-    );
-    for (let i = 0; i < numHparamsToDisplay; i++) {
-      result[i].displayed = true;
+    // Restore the user's persisted hparam selection if there is one.
+    // Otherwise, choose to display the first 5 hparams in the main view.
+    const storedSelection = this._readStoredHparamSelection();
+    if (storedSelection) {
+      result.forEach((hparam) => {
+        if (storedSelection.hasOwnProperty(hparam.info.name)) {
+          hparam.displayed = storedSelection[hparam.info.name];
+        }
+      });
+    } else {
+      const kNumHParamsToDisplayByDefault = 5;
+      const numHparamsToDisplay = Math.min(
+        kNumHParamsToDisplayByDefault,
+        result.length
+      );
+      for (let i = 0; i < numHparamsToDisplay; i++) {
+        result[i].displayed = true;
+      }
     }
     this.set('_hparams', result);
     this.set('_TooManyHparams', result.length >= this._maxNumHparamsToLoad);
@@ -733,6 +770,50 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   // Determines if a regex filter should be rendered.
   _hasRegexpFilter(hparam) {
     return hparam.filter.regexp !== undefined;
+  }
+  // Reads the persisted hyperparameter selection from localStorage. Returns a
+  // map of hparam name to a boolean 'displayed' state, or null if nothing has
+  // been persisted or the stored value is not parseable.
+  _readStoredHparamSelection(): {[name: string]: boolean} | null {
+    const raw = window.localStorage.getItem(SELECTED_HPARAMS_STORAGE_KEY);
+    if (raw === null) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {[name: string]: boolean};
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      // Fall through and treat an unparseable value as no stored selection.
+    }
+    return null;
+  }
+  // Persists the current hyperparameter selection to localStorage so that it
+  // survives a page refresh.
+  _writeStoredHparamSelection() {
+    if (!this._hparams) {
+      return;
+    }
+    const selection: {[name: string]: boolean} = {};
+    this._hparams.forEach((hparam) => {
+      selection[hparam.info.name] = hparam.displayed;
+    });
+    window.localStorage.setItem(
+      SELECTED_HPARAMS_STORAGE_KEY,
+      JSON.stringify(selection)
+    );
+  }
+  // Called when the user toggles an hparam's 'displayed' checkbox. We read the
+  // new checkbox state directly from the event so that the persisted value does
+  // not depend on the two-way binding having already updated 'hparam.displayed'.
+  _hparamDisplayedChanged(e) {
+    const hparam = e.model && e.model.item;
+    const checkbox = e.target;
+    if (hparam && checkbox && typeof checkbox.checked === 'boolean') {
+      hparam.displayed = checkbox.checked;
+    }
+    this._writeStoredHparamSelection();
   }
   // Sends a query to the server for the list of session groups.
   // Asynchronously updates the sessionGroups property with the response.
